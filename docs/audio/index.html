@@ -1,0 +1,171 @@
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Ad Unit</title>
+
+    <script async src="../prebid.js"></script>
+    <script>
+        var FAILSAFE_TIMEOUT = 3300;
+        var PREBID_TIMEOUT = 3000;
+
+        // Prebid.js has no "audio" media type, so we use "video" with audio
+        // MIME types. PBS will still produce an imp.video in the OpenRTB
+        // request, but the bidder/ad server can return audio VAST (mtype: 3).
+        var audioAdUnit = {
+            code: 'audio-ad',
+            mediaTypes: {
+                video: {
+                    context: 'instream',
+                    playerSize: [1, 1],
+                    mimes: ['audio/mp4', 'audio/mpeg', 'audio/ogg'],
+                    protocols: [2, 3, 5, 6],
+                    minduration: 5,
+                    maxduration: 30,
+                    api: [1, 2],
+                    plcmt: 1
+                }
+            },
+            bids: [{
+                bidder: 'stackadapt',
+                params: {
+                    publisherId: '123'
+                }
+            }]
+        };
+
+        var pbjs = pbjs || {};
+        pbjs.que = pbjs.que || [];
+    </script>
+
+    <script>
+        pbjs.que.push(function () {
+            pbjs.addAdUnits(audioAdUnit);
+            pbjs.setConfig({
+                debug: true,
+                s2sConfig: {
+                    accountId: '123',
+                    enabled: true,
+                    bidders: ['stackadapt'],
+                    timeout: 2000,
+                    adapter: 'prebidServer',
+                    endpoint: {
+                        p1Consent: 'http://localhost:8000/openrtb2/auction',
+                        noP1Consent: 'http://localhost:8000/openrtb2/auction'
+                    },
+                    syncEndpoint: {
+                        p1Consent: 'http://localhost:8000/cookie_sync',
+                        noP1Consent: 'http://localhost:8000/cookie_sync'
+                    }
+                },
+                ortb2: {
+                    test: 1
+                }
+            });
+
+            pbjs.requestBids({
+                bidsBackHandler: function (bids) {
+                    console.log('bidsBackHandler bids:', JSON.stringify(bids, null, 2));
+
+                    var adUnitBids = bids[audioAdUnit.code];
+                    console.log('adUnitBids for "' + audioAdUnit.code + '":', adUnitBids);
+
+                    if (!adUnitBids || !adUnitBids.bids || adUnitBids.bids.length === 0) {
+                        console.warn('No audio bids in bidsBackHandler. Trying pbjs.getBidResponses()...');
+                        var allBids = pbjs.getBidResponses();
+                        console.log('pbjs.getBidResponses():', JSON.stringify(allBids, null, 2));
+
+                        adUnitBids = allBids[audioAdUnit.code];
+                        if (!adUnitBids || !adUnitBids.bids || adUnitBids.bids.length === 0) {
+                            document.getElementById('audio-status').textContent = 'No bids received';
+                            return;
+                        }
+                    }
+
+                    var winningBid = adUnitBids.bids[0];
+                    console.log('Winning bid keys:', Object.keys(winningBid));
+                    console.log('Winning bid:', winningBid);
+
+                    var vastXml = winningBid.vastXml || winningBid.ad || winningBid.adm;
+                    if (vastXml) {
+                        playAudioFromVast(vastXml);
+                    } else if (winningBid.vastUrl) {
+                        fetchAndPlayVast(winningBid.vastUrl);
+                    } else {
+                        document.getElementById('audio-status').textContent = 'Bid received but no VAST content. Check console for bid object.';
+                        document.getElementById('vast-xml').textContent = JSON.stringify(winningBid, null, 2);
+                    }
+                },
+                timeout: PREBID_TIMEOUT
+            });
+        });
+
+        function playAudioFromVast(vastXml) {
+            console.log('VAST XML:', vastXml);
+            document.getElementById('vast-xml').textContent = vastXml;
+
+            var parser = new DOMParser();
+            var xmlDoc = parser.parseFromString(vastXml, 'text/xml');
+            var mediaFiles = xmlDoc.getElementsByTagName('MediaFile');
+
+            if (mediaFiles.length === 0) {
+                document.getElementById('audio-status').textContent = 'No MediaFile found in VAST';
+                return;
+            }
+
+            var mediaUrl = mediaFiles[0].textContent.trim();
+            var mediaType = mediaFiles[0].getAttribute('type') || 'audio/mp4';
+            console.log('Media URL:', mediaUrl, 'Type:', mediaType);
+
+            var player = document.getElementById('audio-player');
+            var source = document.getElementById('audio-source');
+            source.src = mediaUrl;
+            source.type = mediaType;
+            player.load();
+            player.muted = true;
+            player.play().catch(function (e) {
+                console.warn('Autoplay blocked:', e);
+                document.getElementById('audio-status').textContent = 'Click play to listen';
+            });
+
+            document.getElementById('audio-status').textContent = 'Audio ad loaded';
+        }
+
+        function fetchAndPlayVast(vastUrl) {
+            fetch(vastUrl)
+                .then(function (r) { return r.text(); })
+                .then(function (xml) { playAudioFromVast(xml); })
+                .catch(function (e) {
+                    console.error('Failed to fetch VAST:', e);
+                    document.getElementById('audio-status').textContent = 'Failed to fetch VAST URL';
+                });
+        }
+    </script>
+
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .ad-slot { border: 2px dashed #bbb; padding: 16px; margin: 16px 0; background: #fafafa; }
+        #audio-status { font-weight: bold; margin: 8px 0; }
+        pre { background: #f0f0f0; padding: 12px; overflow-x: auto; font-size: 12px; max-height: 200px; overflow-y: auto; }
+    </style>
+</head>
+
+<body>
+    <h2>Audio Ad Unit</h2>
+    <p>Uses <code>video</code> media type with audio MIME types, routed through local Prebid Server (S2S).</p>
+
+    <div class="ad-slot">
+        <h4>Audio Ad</h4>
+        <p id="audio-status">Waiting for bids...</p>
+        <audio id="audio-player" controls style="width: 100%;">
+            <source id="audio-source" src="" type="audio/mp4">
+            Your browser does not support the audio element.
+        </audio>
+    </div>
+
+    <h4>VAST Response</h4>
+    <pre id="vast-xml">Waiting for response...</pre>
+</body>
+
+</html>

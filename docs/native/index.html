@@ -1,0 +1,280 @@
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Native Ad Unit</title>
+
+    <!-- required scripts -->
+    <script async src="//cdn.jsdelivr.net/npm/prebid.js@latest/dist/not-for-prod/prebid.js"></script>
+    <script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
+  </head>
+  <body>
+  
+  <!-- javascript -->
+  <script> var googletag = googletag || {};
+googletag.cmd = googletag.cmd || [];
+
+var pbjs = pbjs || {};
+pbjs.que = pbjs.que || [];
+var PREBID_TIMEOUT = 3000;
+
+var date = new Date().getTime();
+
+function initAdserver() {
+    if (pbjs.initAdserverSet) return;
+
+    googletag.cmd.push(function() {
+        if (pbjs.libLoaded) {
+            pbjs.que.push(function() {
+                pbjs.setTargetingForGPTAsync();
+                googletag.pubads().refresh();
+            });
+        } else {
+            googletag.pubads().refresh();
+        }
+    });
+
+    pbjs.initAdserverSet = true;
+}
+
+// Load GPT when timeout is reached.
+setTimeout(initAdserver, PREBID_TIMEOUT);
+
+pbjs.que.push(function() {
+
+    pbjs.setConfig({
+        debug: true,
+        // Prebid Server configuration
+        s2sConfig: {
+            accountId: '123', // publisherId
+            enabled: true,
+            bidders: ['stackadapt'],
+            timeout: 2000,
+            adapter: 'prebidServer',
+            endpoint: {
+                p1Consent: 'http://localhost:8000/openrtb2/auction',
+                noP1Consent: 'http://localhost:8000/openrtb2/auction'
+            },
+            syncEndpoint: {
+                p1Consent: 'http://localhost:8000/cookie_sync',
+                noP1Consent: 'http://localhost:8000/cookie_sync'
+            }
+        },
+        ortb2: {
+            test: 1 // test mode 
+        }
+    });
+
+    var allSlotsBidWon = function allSlotsBidWon() {
+        console.log('allSlotsBidWon called');
+    };
+
+    pbjs.onEvent('bidWon', allSlotsBidWon);
+
+    var adUnits = [{
+            code: '/19968336/prebid_native_example_1',
+            sizes: [
+                [1200, 627]
+            ],
+            mediaTypes: {
+                native: {
+                    ortb: {
+                        assets: [
+                            {
+                                id: 1,
+                                required: 1,
+                                title: {
+                                    len: 80
+                                }
+                            },
+                            {
+                                id: 2,
+                                required: 1,
+                                data: {
+                                    type: 2,
+                                    len: 140
+                                }
+                            },
+                            {
+                                id: 3,
+                                required: 1,
+                                img: {
+                                    type: 3,
+                                    w: 1200,
+                                    h: 627
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            bids: [{
+                bidder: 'stackadapt',
+                params: {
+                    publisherId: '123'
+                }
+            }]
+        },
+        // {
+        //     code: '/19968336/prebid_native_example_2',
+        //     sizes: [
+        //         [1200, 627]
+        //     ],
+        //     mediaTypes: {
+        //         native: {
+        //             title: {
+        //                 required: true
+        //             },
+        //             body: {
+        //                 required: true
+        //             },
+        //             image: {
+        //                 required: true
+        //             },
+        //             sponsoredBy: {
+        //                 required: true
+        //             },
+        //             icon: {
+        //                 required: false
+        //             },
+        //         }
+        //     },
+        //     bids: [{
+        //         bidder: 'stackadapt',
+        //         params: {
+        //             publisherId: '123'
+        //         }
+        //     }]
+        // }
+    ];
+
+    pbjs.addAdUnits(adUnits);
+    pbjs.requestBids({
+        bidsBackHandler: function(bidResponses) {
+            console.log('bidsBackHandler keys:', Object.keys(bidResponses));
+            console.log('bidsBackHandler:', bidResponses);
+
+            var adUnitCode = '/19968336/prebid_native_example_1';
+            var adUnitBids = bidResponses[adUnitCode];
+
+            if (!adUnitBids || !adUnitBids.bids || adUnitBids.bids.length === 0) {
+                console.warn('No bids under key "' + adUnitCode + '"');
+                console.log('All bid responses from pbjs.getBidResponses():', pbjs.getBidResponses());
+                console.log('All bid responses from pbjs.getBidResponsesForAdUnitCode():', pbjs.getBidResponsesForAdUnitCode(adUnitCode));
+                console.log('No bid reasons from pbjs.getNoBids():', pbjs.getNoBids());
+
+                var allResponses = pbjs.getBidResponses();
+                var keys = Object.keys(allResponses);
+                if (keys.length > 0) {
+                    var firstKey = keys[0];
+                    console.log('Found bids under key "' + firstKey + '" instead');
+                    adUnitBids = allResponses[firstKey];
+                    if (adUnitBids && adUnitBids.bids && adUnitBids.bids.length > 0) {
+                        renderNativeAd(adUnitBids.bids[0]);
+                        return;
+                    }
+                }
+
+                document.getElementById('native-status').textContent = 'No bids received. Check console.';
+                return;
+            }
+
+            var bid = adUnitBids.bids[0];
+            console.log('Winning bid:', bid);
+            renderNativeAd(bid);
+        }
+    });
+});
+
+function renderNativeAd(bid) {
+    var container = document.getElementById('native-ad');
+    var statusEl = document.getElementById('native-status');
+
+    if (bid.native && bid.native.ortb) {
+        renderFromOrtb(bid.native.ortb, container, statusEl);
+        return;
+    }
+    if (bid.native) {
+        renderFromPrebidNative(bid.native, container, statusEl);
+        return;
+    }
+
+    var adm = bid.ad || bid.adm;
+    if (!adm) {
+        statusEl.textContent = 'Bid received but no native content. Check console.';
+        document.getElementById('native-raw').textContent = JSON.stringify(bid, null, 2);
+        return;
+    }
+
+    try {
+        var nativeResponse = JSON.parse(adm);
+        console.log('Parsed native response:', nativeResponse);
+        renderFromOrtb(nativeResponse, container, statusEl);
+    } catch (e) {
+        statusEl.textContent = 'Could not parse adm as JSON';
+        document.getElementById('native-raw').textContent = adm;
+    }
+}
+
+function renderFromOrtb(native, container, statusEl) {
+    var title = '';
+    var body = '';
+    var imageUrl = '';
+    var clickUrl = native.link ? native.link.url : '';
+
+    (native.assets || []).forEach(function(asset) {
+        if (asset.title) title = asset.title.text;
+        if (asset.data) body = asset.data.value;
+        if (asset.img) imageUrl = asset.img.url;
+    });
+
+    renderToDOM(container, statusEl, title, body, imageUrl, clickUrl);
+    document.getElementById('native-raw').textContent = JSON.stringify(native, null, 2);
+}
+
+function renderFromPrebidNative(native, container, statusEl) {
+    renderToDOM(
+        container, statusEl,
+        native.title || '',
+        native.body || '',
+        native.image ? (native.image.url || native.image) : '',
+        native.clickUrl || ''
+    );
+    document.getElementById('native-raw').textContent = JSON.stringify(native, null, 2);
+}
+
+function renderToDOM(container, statusEl, title, body, imageUrl, clickUrl) {
+    var html = '';
+    if (clickUrl) html += '<a href="' + clickUrl + '" target="_blank">';
+    if (title) html += '<h3 style="margin:0 0 8px">' + title + '</h3>';
+    if (imageUrl) html += '<img src="' + imageUrl + '" style="max-width:100%;height:auto;border-radius:4px">';
+    if (body) html += '<p style="margin:8px 0 0">' + body + '</p>';
+    if (clickUrl) html += '</a>';
+
+    container.innerHTML = html || '<p>No assets to render</p>';
+    statusEl.textContent = 'Native ad rendered';
+}
+
+</script>
+
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+    .ad-slot { border: 2px dashed #bbb; padding: 16px; margin: 16px 0; background: #fafafa; }
+    #native-status { font-weight: bold; margin: 8px 0; }
+    pre { background: #f0f0f0; padding: 12px; overflow-x: auto; font-size: 12px; max-height: 300px; overflow-y: auto; }
+  </style>
+
+  <h2>Native Ad Unit</h2>
+
+  <div class="ad-slot">
+    <h4>Native Ad</h4>
+    <p id="native-status">Waiting for bids...</p>
+    <div id="native-ad"></div>
+  </div>
+
+  <h4>Raw Native Response</h4>
+  <pre id="native-raw">Waiting for response...</pre>
+
+  </body>
+</html>
