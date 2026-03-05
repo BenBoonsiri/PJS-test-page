@@ -1,0 +1,178 @@
+<!--
+  This page calls a single bidder for a single ad slot. It can be considered a "hello world" example for using
+  Prebid with the Google Publisher Tag.
+  It also makes a good test page for new adapter PR submissions. Simply set your server's Bid Params object in the
+  bids array inside the adUnits, and it will use your adapter to load an ad.
+  NOTE that many ad servers won't send back an ad if the URL is localhost... so you might need to
+  set an alias in your /etc/hosts file so that you can load this page from a different domain.
+-->
+
+<html>
+
+<head>
+    <link href="https://vjs.zencdn.net/7.21.1/video-js.css" rel="stylesheet">
+    <script src="https://vjs.zencdn.net/7.21.1/video.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/videojs-vast-vpaid@2.0.2/bin/videojs_5.vast.vpaid.min.js"></script>
+    <script async src="./prebid.js"></script>
+    <script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
+    <script>
+        var FAILSAFE_TIMEOUT = 3300;
+        var PREBID_TIMEOUT = 1000;
+
+        var videoAdUnit = {
+            code: 'video',
+            mediaTypes: {
+                video: {
+                    context: 'instream',
+                    playerSize: [1920, 1080],
+                    mimes: ['video/mp4'],
+                    protocols: [1, 2, 3, 4, 5, 6, 7, 8],
+                    playbackmethod: [2],
+                    skip: 1
+                },
+            },
+            bids: [{
+                bidder: 'stackadapt',
+                params: {
+                    publisherId: '123'
+                }
+            }]
+        };
+
+        var pbjs = pbjs || {};
+        pbjs.que = pbjs.que || [];
+
+    </script>
+
+    <script>
+        var googletag = googletag || {};
+        googletag.cmd = googletag.cmd || [];
+        googletag.cmd.push(function () {
+            googletag.pubads().disableInitialLoad();
+        });
+
+        pbjs.que.push(function () {
+            pbjs.addAdUnits(videoAdUnit);
+            pbjs.setConfig({
+                debug: true,
+                // Prebid Server configuration
+                s2sConfig: {
+                    accountId: '123', // publisherId
+                    enabled: true,
+                    bidders: ['stackadapt'],
+                    timeout: 2000,
+                    adapter: 'prebidServer',
+                    endpoint: {
+                        p1Consent: 'http://localhost:8000/openrtb2/auction',
+                        noP1Consent: 'http://localhost:8000/openrtb2/auction'
+                    },
+                    syncEndpoint: {
+                        p1Consent: 'http://localhost:8000/cookie_sync',
+                        noP1Consent: 'http://localhost:8000/cookie_sync'
+                    }
+                },
+                ortb2: {
+                    test: 1 // test mode 
+                },
+                cache: {
+                    url: 'http://localhost:2424/cache'
+                }
+            });
+
+            pbjs.requestBids({
+                bidsBackHandler: function(bids) {
+                    console.log('bidsBackHandler bids:', bids);
+
+                    var adUnitBids = bids[videoAdUnit.code];
+                    if (!adUnitBids || !adUnitBids.bids || adUnitBids.bids.length === 0) {
+                        console.warn('No video bids received');
+                        return;
+                    }
+
+                    var winningBid = adUnitBids.bids[0];
+                    console.log('Winning bid:', winningBid);
+
+                    if (winningBid.vastXml) {
+                        invokeVideoPlayerWithVast(winningBid.vastXml);
+                    } else if (winningBid.vastUrl) {
+                        invokeVideoPlayer(winningBid.vastUrl);
+                    } else {
+                        console.warn('No VAST XML or URL in bid response');
+                    }
+                },
+                timeout: PREBID_TIMEOUT
+            });
+        });
+    </script>
+
+    <script>
+        googletag.cmd.push(function () {
+            googletag.defineSlot('/19968336/header-bid-tag-0', [[300, 250], [300, 600]], 'div-gpt-ad-1460505748561-0').addService(googletag.pubads());
+            googletag.defineSlot('/19968336/prebid_native_example_1', 'fluid', 'div-native-ad').addService(googletag.pubads());
+
+            googletag.pubads().enableSingleRequest();
+            googletag.enableServices();
+        });
+    </script>
+</head>
+
+<body>
+    <h2>Prebid.js Test</h2>
+    <h5>Div-1</h5>
+    <h1>Header 1</h1>
+    <h2>Header 2</h2>
+    <h3>Header 3</h3>
+    <h4>Header 4</h4>
+    <h5>Header 5</h5>
+    <h6>Header 6</h6>
+    <p>Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.
+
+        Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.
+        
+        Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.
+        
+        Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.
+        
+        Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.</p>
+
+    <div class="example-video-container">
+        <video id="vid1" class="video-js vjs-default-skin vjs-big-play-centered" controls
+            data-setup='{}'
+            width='640'
+            height='480'>
+            <source src="https://vjs.zencdn.net/v/oceans.mp4" type='video/mp4'/>
+            <source src="https://vjs.zencdn.net/v/oceans.webm" type='video/webm'/>
+            <source src="https://vjs.zencdn.net/v/oceans.ogv" type='video/ogg'/>
+        </video>
+        </div>
+        
+        <script>
+        function invokeVideoPlayer(url) {
+            videojs("vid1").ready(function() {
+                this.vastClient({
+                    adTagUrl: url,
+                    playAdAlways: true,
+                    verbosity: 4,
+                    autoplay: true
+                });
+                this.muted(true);
+                this.play();
+            });
+        }
+
+        function invokeVideoPlayerWithVast(vastXml) {
+            videojs("vid1").ready(function() {
+                this.vastClient({
+                    adTagXML: function(callback) { callback(null, vastXml); },
+                    playAdAlways: true,
+                    verbosity: 4,
+                    autoplay: true
+                });
+                this.muted(true);
+                this.play();
+            });
+        }
+        </script>
+</body>
+
+</html>
