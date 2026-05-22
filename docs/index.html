@@ -322,6 +322,10 @@
       border-top: 1px solid var(--line);
       padding: 1rem 0;
     }
+    #request-section {
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 2.5rem;
+    }
     details > summary {
       list-style: none;
       cursor: pointer;
@@ -477,6 +481,37 @@
       </div>
     </div>
 
+    <details id="request-section">
+      <summary>Targeting info</summary>
+      <div class="body">
+        <div class="request-actions">
+          <button id="btn-copy-request" class="ghost">Copy all</button>
+        </div>
+        <div class="request-rows">
+          <div class="request-row">
+            <span class="k">Domain</span>
+            <span class="v" id="d-domain"></span>
+            <button data-copy-request="domain" class="ghost">Copy</button>
+          </div>
+          <div class="request-row">
+            <span class="k">Page URL</span>
+            <span class="v" id="d-page-url"></span>
+            <button data-copy-request="page-url" class="ghost">Copy</button>
+          </div>
+          <div class="request-row">
+            <span class="k">IP</span>
+            <span class="v empty" id="d-ip">detecting...</span>
+            <button data-copy-request="ip" class="ghost">Copy</button>
+          </div>
+          <div class="request-row">
+            <span class="k">UA</span>
+            <span class="v" id="d-ua"></span>
+            <button data-copy-request="ua" class="ghost">Copy</button>
+          </div>
+        </div>
+      </div>
+    </details>
+
     <section id="slots-section">
       <div class="head">
         <h2>Ad slots</h2>
@@ -516,37 +551,6 @@
         <div class="log" id="log"></div>
         <div style="margin-top:.5rem;text-align:right">
           <button id="btn-clear-log" class="ghost">Clear</button>
-        </div>
-      </div>
-    </details>
-
-    <details id="request-section">
-      <summary>Request details</summary>
-      <div class="body">
-        <div class="request-actions">
-          <button id="btn-copy-request" class="ghost">Copy all</button>
-        </div>
-        <div class="request-rows">
-          <div class="request-row">
-            <span class="k">Domain</span>
-            <span class="v" id="d-domain"></span>
-            <button data-copy-request="domain" class="ghost">Copy</button>
-          </div>
-          <div class="request-row">
-            <span class="k">Page URL</span>
-            <span class="v" id="d-page-url"></span>
-            <button data-copy-request="page-url" class="ghost">Copy</button>
-          </div>
-          <div class="request-row">
-            <span class="k">IP</span>
-            <span class="v empty" id="d-ip">detecting...</span>
-            <button data-copy-request="ip" class="ghost">Copy</button>
-          </div>
-          <div class="request-row">
-            <span class="k">UA</span>
-            <span class="v" id="d-ua"></span>
-            <button data-copy-request="ua" class="ghost">Copy</button>
-          </div>
         </div>
       </div>
     </details>
@@ -621,6 +625,7 @@
     }
 
     function initRequestDetails() {
+      $('request-section').removeAttribute('open');
       $('d-domain').textContent = window.location.hostname;
       $('d-page-url').textContent = window.location.href;
       $('d-ua').textContent = navigator.userAgent;
