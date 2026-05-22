@@ -1,117 +1,749 @@
 <!--
-  This page calls a single bidder for a single ad slot. It can be considered a "hello world" example for using
-  Prebid with the Google Publisher Tag.
-  It also makes a good test page for new adapter PR submissions. Simply set your server's Bid Params object in the
-  bids array inside the adUnits, and it will use your adapter to load an ad.
-  NOTE that many ad servers won't send back an ad if the URL is localhost... so you might need to
-  set an alias in your /etc/hosts file so that you can load this page from a different domain.
+  StackAdapt Prebid.js
+
+  Purpose
+  -------
+  A single-page Prebid harness that calls the StackAdapt bidder for four ad
+  slots (300x250, 728x90, 300x600, 320x50) and renders winning bids through
+  Google Publisher Tag.
+
+  URL parameters
+  --------------
+    ?publisherId=<id>   override the publisherId param sent to stackadapt
+    ?placementId=<id>   optional placementId param sent to stackadapt
+    ?bidfloor=<float>   optional bid floor sent to stackadapt
+    ?timeout=<ms>       prebid auction timeout (default 1500)
+    ?debug=0            disable pbjs.setConfig({debug:true})
+    ?noGPT=1            render winning bid directly (skip GoogleTag)
 -->
-
-<html>
-
+<!doctype html>
+<html lang="en">
 <head>
-    <script async src="./prebid.js"></script>
-    <script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
-    <script>
-        var FAILSAFE_TIMEOUT = 3300;
-        var PREBID_TIMEOUT = 1000;
+  <meta charset="utf-8">
+  <title>StackAdapt Prebid Test</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%23ff5a36'/%3E%3C/svg%3E">
 
-        var adUnits = [{
-            code: 'div-gpt-ad-1460505748561-0',
-            mediaTypes: {
-                banner: {
-                    sizes: [[300, 250]],
-                }
-            },
+  <script async src="./prebid.js"></script>
+  <script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
 
-            // Replace this object to test a new Adapter!
-            bids: [{
-                bidder: 'stackadapt',
-                params: {
-                    publisherId: '123'
-                }
-            }]
+  <style>
+    :root {
+      --bg: #ffffff;
+      --surface: #fafafa;
+      --line: #ececec;
+      --line-soft: #f4f4f4;
+      --text: #0a0a0a;
+      --text-soft: #525252;
+      --muted: #a3a3a3;
+      --accent: #ff5a36;
+      --ok: #16a34a;
+      --warn: #ca8a04;
+      --err: #dc2626;
+      --info: #2563eb;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    }
 
-        }];
+    * { box-sizing: border-box; }
 
-        var pbjs = pbjs || {};
-        pbjs.que = pbjs.que || [];
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 14px/1.55 var(--font);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
 
-    </script>
+    a { color: var(--text); text-decoration: underline; text-decoration-color: var(--muted); text-underline-offset: 3px; }
+    a:hover { text-decoration-color: var(--accent); }
 
-    <script>
-        var googletag = googletag || {};
-        googletag.cmd = googletag.cmd || [];
-        googletag.cmd.push(function () {
-            googletag.pubads().disableInitialLoad();
-        });
+    code, .mono { font-family: var(--mono); font-size: .85em; }
 
-        pbjs.que.push(function () {
-            pbjs.setConfig({
-                debug: true
-            });
-            pbjs.addAdUnits(adUnits);
+    .wrap {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
 
-            pbjs.requestBids({
-                bidsBackHandler: sendAdserverRequest,
-                timeout: PREBID_TIMEOUT
-            });
-        });
+    /* ---- top bar ---- */
+    .top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 2.25rem;
+    }
+    .top .brand {
+      display: flex; align-items: center; gap: .65rem;
+    }
+    .top .mark {
+      width: 22px; height: 22px;
+      background: var(--accent);
+      border-radius: 5px;
+    }
+    .top h1 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: -0.005em;
+    }
+    .top .tag {
+      color: var(--muted);
+      font-size: .8rem;
+      font-family: var(--mono);
+    }
+    .top .actions { display: flex; gap: .5rem; align-items: center; }
 
-        function sendAdserverRequest() {
-            if (pbjs.adserverRequestSent) return;
-            pbjs.adserverRequestSent = true;
-            googletag.cmd.push(function () {
-                if (pbjs.libLoaded) {
-                    pbjs.que.push(function () {
-                        pbjs.setTargetingForGPTAsync();
-                        googletag.pubads().refresh();
-                    });
-                } else {
-                    googletag.pubads().refresh();
-                }
-            });
-        }
+    /* ---- sections ---- */
+    section { margin-bottom: 2.5rem; }
+    section > .head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: .9rem;
+    }
+    section > .head h2 {
+      margin: 0;
+      font-size: .72rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    section > .head .meta {
+      color: var(--muted);
+      font-size: .78rem;
+      font-family: var(--mono);
+    }
 
-        setTimeout(function () {
-            sendAdserverRequest();
-        }, FAILSAFE_TIMEOUT);
+    /* ---- buttons ---- */
+    button, .btn {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: .35rem .75rem;
+      font: inherit;
+      font-size: .8rem;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color .12s ease, color .12s ease, background .12s ease;
+    }
+    button:hover, .btn:hover {
+      border-color: var(--text);
+    }
+    button.primary {
+      background: var(--text);
+      color: var(--bg);
+      border-color: var(--text);
+    }
+    button.primary:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    button.ghost {
+      border-color: transparent;
+      color: var(--text-soft);
+      padding: .25rem .5rem;
+    }
+    button.ghost:hover { color: var(--accent); border-color: transparent; background: transparent; }
 
-    </script>
+    /* ---- status dots ---- */
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      display: inline-block;
+      margin-right: .35rem;
+      vertical-align: middle;
+    }
+    .dot.ok   { background: var(--ok);   box-shadow: 0 0 0 3px rgba(22, 163, 74, .12); }
+    .dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(202, 138, 4, .12); }
+    .dot.err  { background: var(--err);  box-shadow: 0 0 0 3px rgba(220, 38, 38, .12); }
+    .dot.info { background: var(--info); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+    .dot.live { background: var(--info); animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, .35); }
+      50%      { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0); }
+    }
 
-    <script>
-        googletag.cmd.push(function () {
-            googletag.defineSlot('/19968336/header-bid-tag-0', [[300, 250], [300, 600]], 'div-gpt-ad-1460505748561-0').addService(googletag.pubads());
+    /* ---- slot list (one slot per row so every ad renders at its native size) ---- */
+    .slots {
+      display: flex;
+      flex-direction: column;
+      gap: .75rem;
+    }
+    .slot {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: .85rem;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        "head head"
+        "stage meta";
+      column-gap: 1rem;
+      row-gap: .65rem;
+      align-items: center;
+      transition: border-color .15s ease;
+    }
+    .slot.won { border-color: var(--ok); }
+    .slot.empty { border-color: var(--line); }
+    .slot-head {
+      grid-area: head;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: .8rem;
+    }
+    .slot-head .name { font-weight: 600; }
+    .slot-head .size { color: var(--muted); font-family: var(--mono); font-size: .72rem; }
+    .stage {
+      grid-area: stage;
+      background: var(--surface);
+      border: 1px solid var(--line-soft);
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      min-height: 70px;
+      max-height: 330px;
+      overflow: auto;
+      position: relative;
+      justify-self: start;
+      max-width: 100%;
+    }
+    .stage .placeholder {
+      color: var(--muted);
+      font-size: .72rem;
+      font-family: var(--mono);
+      text-align: center;
+      pointer-events: none;
+    }
+    .stage .gpt-div { display: grid; place-items: center; }
+    .slot-meta {
+      grid-area: meta;
+      font-family: var(--mono);
+      font-size: .7rem;
+      color: var(--muted);
+      line-height: 1.5;
+      text-align: right;
+      align-self: end;
+      padding-bottom: .25rem;
+    }
+    .slot-meta b { color: var(--text); font-weight: 600; }
 
-            googletag.pubads().enableSingleRequest();
-            googletag.enableServices();
-        });
-    </script>
+    /* ---- bids table ---- */
+    .table-wrap { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    table.bids {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .82rem;
+    }
+    table.bids th, table.bids td {
+      text-align: left;
+      padding: .55rem .85rem;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    table.bids tr:last-child td { border-bottom: 0; }
+    table.bids th {
+      font-weight: 500;
+      color: var(--muted);
+      font-size: .68rem;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      background: var(--surface);
+    }
+    table.bids td { font-family: var(--mono); font-size: .78rem; }
+    table.bids td.bidder { font-family: var(--font); font-weight: 500; }
+    table.bids tr.won td { background: #f0fdf4; color: var(--ok); }
+    table.bids .badge {
+      display: inline-block;
+      padding: 1px .4rem;
+      border-radius: 999px;
+      font-size: .62rem;
+      font-weight: 600;
+      letter-spacing: .04em;
+      background: var(--ok);
+      color: white;
+      font-family: var(--font);
+    }
+    .empty-state {
+      padding: 1.5rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: .82rem;
+      font-style: italic;
+    }
+
+    /* ---- collapsibles (diagnostics / log) ---- */
+    details {
+      border-top: 1px solid var(--line);
+      padding: 1rem 0;
+    }
+    details > summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: .85rem;
+      font-weight: 500;
+      color: var(--text);
+      user-select: none;
+    }
+    details > summary::after {
+      content: "+";
+      color: var(--muted);
+      font-weight: 400;
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+    details[open] > summary::after { content: "−"; }
+    details > summary:hover { color: var(--accent); }
+    details .body { padding: 1rem 0 .25rem; }
+
+    /* ---- diagnostics dl ---- */
+    dl.kv {
+      margin: 0;
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      column-gap: 1.5rem;
+      row-gap: .5rem;
+    }
+    dl.kv dt {
+      color: var(--muted);
+      font-size: .78rem;
+    }
+    dl.kv dd {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: .78rem;
+      color: var(--text);
+      word-break: break-all;
+    }
+    dl.kv dd.empty { color: var(--muted); font-style: italic; font-family: var(--font); }
+
+    /* ---- event log ---- */
+    .log {
+      font-family: var(--mono);
+      font-size: .72rem;
+      max-height: 260px;
+      overflow: auto;
+      background: var(--surface);
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      padding: .5rem .75rem;
+    }
+    .log .line {
+      padding: .15rem 0;
+      color: var(--text-soft);
+      display: grid;
+      grid-template-columns: 80px 50px 1fr;
+      gap: .5rem;
+    }
+    .log .ts   { color: var(--muted); }
+    .log .lvl  { font-weight: 600; }
+    .log .lvl.info { color: var(--info); }
+    .log .lvl.ok   { color: var(--ok); }
+    .log .lvl.warn { color: var(--warn); }
+    .log .lvl.err  { color: var(--err); }
+    .log .lvl.bid  { color: var(--accent); }
+
+    /* ---- footer ---- */
+    footer {
+      color: var(--muted);
+      font-size: .75rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--line);
+      margin-top: 2.5rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    /* ---- responsive ---- */
+    @media (max-width: 600px) {
+      .wrap { padding: 1.5rem 1rem 3rem; }
+      .top h1 { font-size: .9rem; }
+      .top .tag { display: none; }
+    }
+  </style>
+
+  <script>
+    var FAILSAFE_TIMEOUT = 3300;
+
+    var params = new URLSearchParams(window.location.search);
+    var PUBLISHER_ID    = params.get('publisherId')  || '123';
+    var PLACEMENT_ID    = params.get('placementId')  || '';
+    var BIDFLOOR        = parseFloat(params.get('bidfloor')) || 0;
+    var PREBID_TIMEOUT  = parseInt(params.get('timeout'), 10) || 1500;
+    var DEBUG           = params.get('debug') !== '0';
+    var NO_GPT          = params.get('noGPT') === '1';
+
+    function buildBidParams() {
+      var p = { publisherId: PUBLISHER_ID };
+      if (PLACEMENT_ID) p.placementId = PLACEMENT_ID;
+      if (BIDFLOOR > 0) p.bidfloor = BIDFLOOR;
+      return p;
+    }
+
+    var SLOT_DEFS = [
+      { code: 'sa-slot-300x250', size: [300, 250], gpt: '/19968336/header-bid-tag-0', label: 'Medium Rectangle' },
+      { code: 'sa-slot-728x90',  size: [728, 90],  gpt: '/19968336/header-bid-tag-1', label: 'Leaderboard'      },
+      { code: 'sa-slot-300x600', size: [300, 600], gpt: '/19968336/header-bid-tag-2', label: 'Half Page'        },
+      { code: 'sa-slot-320x50',  size: [320, 50],  gpt: '/19968336/header-bid-tag-3', label: 'Mobile Banner'    }
+    ];
+
+    var adUnits = SLOT_DEFS.map(function (s) {
+      return {
+        code: s.code,
+        mediaTypes: { banner: { sizes: [s.size] } },
+        bids: [{ bidder: 'stackadapt', params: buildBidParams() }]
+      };
+    });
+
+    var pbjs = pbjs || {};
+    pbjs.que = pbjs.que || [];
+
+    var googletag = googletag || {};
+    googletag.cmd = googletag.cmd || [];
+
+    googletag.cmd.push(function () {
+      googletag.pubads().disableInitialLoad();
+    });
+  </script>
 </head>
 
 <body>
-    <h2>Prebid.js Test</h2>
-    <h5>Div-1</h5>
-    <h1>Header 1</h1>
-    <h2>Header 2</h2>
-    <h3>Header 3</h3>
-    <h4>Header 4</h4>
-    <h5>Header 5</h5>
-    <h6>Header 6</h6>
-    <p>Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.
-
-        Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.
-        
-        Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.
-        
-        Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.
-        
-        Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.</p>
-    <div id='div-gpt-ad-1460505748561-0'>
-        <script type='text/javascript'>
-            googletag.cmd.push(function () { googletag.display('div-gpt-ad-1460505748561-0'); });
-        </script>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand">
+        <span class="mark"></span>
+        <h1>Prebid Test</h1>
+      </div>
+      <div class="actions">
+        <span id="status" class="mono" style="font-size:.75rem;color:var(--muted)"><span class="dot live"></span>loading</span>
+        <button id="btn-refresh" class="primary">Refresh bids</button>
+      </div>
     </div>
-</body>
 
+    <section id="slots-section">
+      <div class="head">
+        <h2>Ad slots</h2>
+        <span class="meta" id="slots-meta">4 slots</span>
+      </div>
+      <div class="slots" id="slot-grid"></div>
+    </section>
+
+    <section id="bids-section">
+      <div class="head">
+        <h2>Bid responses</h2>
+        <span class="meta" id="bids-meta">no auctions yet</span>
+      </div>
+      <div id="resp-body"><div class="empty-state">No auction has run yet.</div></div>
+    </section>
+
+    <details id="diag-section">
+      <summary>Diagnostics</summary>
+      <div class="body">
+        <dl class="kv">
+          <dt>Prebid version</dt>     <dd class="empty" id="d-pbjs-ver">—</dd>
+          <dt>GPT</dt>                <dd class="empty" id="d-gpt">—</dd>
+          <dt>Publisher ID</dt>       <dd id="d-pub"></dd>
+          <dt>Placement ID</dt>       <dd class="empty" id="d-place">—</dd>
+          <dt>Bid floor</dt>          <dd class="empty" id="d-floor">—</dd>
+          <dt>Auction timeout</dt>    <dd id="d-to"></dd>
+          <dt>Render mode</dt>        <dd id="d-mode"></dd>
+          <dt>Referrer</dt>           <dd class="empty" id="d-ref">none</dd>
+          <dt>Auctions run</dt>       <dd id="d-auc">0</dd>
+        </dl>
+      </div>
+    </details>
+
+    <details id="log-section">
+      <summary>Event log</summary>
+      <div class="body">
+        <div class="log" id="log"></div>
+        <div style="margin-top:.5rem;text-align:right">
+          <button id="btn-clear-log" class="ghost">Clear</button>
+        </div>
+      </div>
+    </details>
+
+    <footer>
+      <span><a href="https://docs.prebid.org/dev-docs/bidders/stackadapt.html" target="_blank" rel="noopener">stackadapt adapter docs</a></span>
+    </footer>
+  </div>
+
+  <script>
+    var $   = function (id) { return document.getElementById(id); };
+    var fmt = function (n)  { return (typeof n === 'number') ? n.toFixed(4) : String(n); };
+    var auctionCount = 0;
+
+    function setStatus(state, text) {
+      var el = $('status'); if (!el) return;
+      var cls = { loading: 'live', auction: 'live', ok: 'ok', warn: 'warn', err: 'err', info: 'info' }[state] || 'info';
+      el.innerHTML = '<span class="dot ' + cls + '"></span>' + text;
+    }
+
+    function logLine(level, msg) {
+      var d = new Date();
+      var ts = d.toISOString().slice(11, 23);
+      var line = document.createElement('div');
+      line.className = 'line';
+      line.innerHTML =
+        '<span class="ts">' + ts + '</span>' +
+        '<span class="lvl ' + level + '">' + level.toUpperCase() + '</span>' +
+        '<span class="msg">' + msg + '</span>';
+      var log = $('log');
+      log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function initDiagnostics() {
+      $('d-ref').textContent  = document.referrer || 'none';
+      $('d-ref').classList.toggle('empty', !document.referrer);
+      $('d-pub').textContent  = PUBLISHER_ID;
+      if (PLACEMENT_ID) { $('d-place').textContent = PLACEMENT_ID; $('d-place').classList.remove('empty'); }
+      if (BIDFLOOR > 0) { $('d-floor').textContent = String(BIDFLOOR); $('d-floor').classList.remove('empty'); }
+      $('d-to').textContent   = PREBID_TIMEOUT + ' ms';
+      $('d-mode').textContent = NO_GPT ? 'pbjs.renderAd (no GPT)' : 'GoogleTag · GAM 19968336';
+      $('d-auc').textContent  = String(auctionCount);
+
+      $('btn-refresh').addEventListener('click', function () {
+        logLine('info', 'manual refresh');
+        runAuction();
+      });
+      $('btn-clear-log').addEventListener('click', function () { $('log').innerHTML = ''; });
+    }
+
+    function renderSlotGrid() {
+      var grid = $('slot-grid');
+      SLOT_DEFS.forEach(function (s) {
+        var card = document.createElement('div');
+        card.className = 'slot';
+        card.id = 'slot-' + s.code;
+        var stageH = Math.max(70, Math.min(s.size[1] + 16, 330));
+        var stageW = s.size[0] + 16;
+        card.innerHTML =
+          '<div class="slot-head">' +
+            '<span class="name">' + s.label + '</span>' +
+            '<span class="size">' + s.size[0] + '×' + s.size[1] + '</span>' +
+          '</div>' +
+          '<div class="stage" style="height:' + stageH + 'px;width:' + stageW + 'px">' +
+            '<div class="placeholder" id="ph-' + s.code + '">awaiting bids</div>' +
+            '<div class="gpt-div" id="' + s.code + '" style="width:' + s.size[0] + 'px;height:' + s.size[1] + 'px"></div>' +
+          '</div>' +
+          '<div class="slot-meta" id="meta-' + s.code + '"><span style="color:var(--muted)">status:</span> <b>waiting</b></div>';
+        grid.appendChild(card);
+      });
+    }
+
+    function setSlotState(code, state, info) {
+      var slot = $('slot-' + code);
+      if (!slot) return;
+      slot.classList.remove('won', 'empty');
+      if (state === 'won')   slot.classList.add('won');
+      if (state === 'empty') slot.classList.add('empty');
+      $('meta-' + code).innerHTML = '<span style="color:var(--muted)">status:</span> <b>' + info + '</b>';
+    }
+
+    var lastByAuction = {};
+    SLOT_DEFS.forEach(function (s) { lastByAuction[s.code] = []; });
+
+    function renderBidsTable(byAuction) {
+      var rows = [];
+      Object.keys(byAuction).forEach(function (slot) {
+        byAuction[slot].forEach(function (b) { rows.push(b); });
+      });
+      if (rows.length === 0) {
+        $('resp-body').innerHTML = '<div class="empty-state">No bids received.</div>';
+        return;
+      }
+      var html = '<div class="table-wrap"><table class="bids"><thead><tr>' +
+        '<th>Slot</th><th>Bidder</th><th>CPM</th><th>Size</th><th>Creative</th><th>TTR</th><th></th>' +
+        '</tr></thead><tbody>';
+      rows.forEach(function (b) {
+        html += '<tr class="' + (b.won ? 'won' : '') + '">' +
+          '<td>' + b.slot + '</td>' +
+          '<td class="bidder">' + b.bidder + '</td>' +
+          '<td>' + fmt(b.cpm) + ' ' + (b.currency || 'USD') + '</td>' +
+          '<td>' + b.size + '</td>' +
+          '<td>' + (b.creativeId || '—') + '</td>' +
+          '<td>' + (b.ttr || '—') + 'ms</td>' +
+          '<td>' + (b.won ? '<span class="badge">WON</span>' : '') + '</td>' +
+        '</tr>';
+      });
+      html += '</tbody></table></div>';
+      $('resp-body').innerHTML = html;
+    }
+
+    function runAuction() {
+      auctionCount += 1;
+      $('d-auc').textContent = String(auctionCount);
+      $('bids-meta').textContent = 'auction #' + auctionCount + ' running…';
+      $('slots-meta').textContent = 'auction #' + auctionCount + ' running…';
+      setStatus('auction', 'auctioning');
+      logLine('info', 'auction #' + auctionCount + ' requested for ' + SLOT_DEFS.length + ' slots');
+
+      lastByAuction = {};
+      SLOT_DEFS.forEach(function (s) {
+        lastByAuction[s.code] = [];
+        setSlotState(s.code, '', 'auctioning…');
+        var ph = $('ph-' + s.code); if (ph) ph.textContent = 'awaiting bids';
+      });
+      renderBidsTable(lastByAuction);
+
+      pbjs.que.push(function () {
+        pbjs.requestBids({ bidsBackHandler: handleBidsBack, timeout: PREBID_TIMEOUT });
+      });
+    }
+
+    function handleBidsBack(bidResponses) {
+      var totalBids = 0;
+      var wonPerSlot = {};
+      Object.keys(bidResponses || {}).forEach(function (slot) {
+        var resp = (bidResponses[slot] && bidResponses[slot].bids) || [];
+        if (!lastByAuction[slot]) lastByAuction[slot] = [];
+
+        var top = null;
+        resp.forEach(function (b) { if (!top || b.cpm > top.cpm) top = b; });
+
+        resp.forEach(function (b) {
+          totalBids += 1;
+          lastByAuction[slot].push({
+            slot: slot, bidder: b.bidder, cpm: b.cpm, currency: b.currency,
+            size: (b.width || '?') + 'x' + (b.height || '?'),
+            creativeId: b.creativeId, ttr: b.timeToRespond,
+            adId: b.adId, adUrl: b.adUrl, ad: b.ad,
+            won: (top && b === top)
+          });
+        });
+        if (top) {
+          wonPerSlot[slot] = top;
+          logLine('bid', slot + ' top: ' + top.bidder + ' @ ' + fmt(top.cpm) + ' (' + top.timeToRespond + 'ms)');
+        } else {
+          logLine('warn', slot + ' no bids');
+        }
+      });
+
+      renderBidsTable(lastByAuction);
+      $('bids-meta').textContent = totalBids + ' bid' + (totalBids === 1 ? '' : 's') + ' received';
+
+      if (totalBids === 0) {
+        setStatus('warn', 'no bids');
+      } else {
+        setStatus('ok', totalBids + ' bid' + (totalBids === 1 ? '' : 's'));
+      }
+
+      if (NO_GPT) renderViaPrebid(wonPerSlot);
+      else        sendAdserverRequest();
+    }
+
+    function renderViaPrebid(wonPerSlot) {
+      SLOT_DEFS.forEach(function (s) {
+        var top = wonPerSlot[s.code];
+        var target = document.getElementById(s.code);
+        if (!target) return;
+        if (!top) {
+          setSlotState(s.code, 'empty', 'no bid');
+          var ph = $('ph-' + s.code); if (ph) ph.textContent = 'no bid';
+          return;
+        }
+        var iframe = document.createElement('iframe');
+        iframe.frameBorder = '0'; iframe.scrolling = 'no';
+        iframe.width = s.size[0]; iframe.height = s.size[1];
+        iframe.style.border = '0';
+        target.innerHTML = ''; target.appendChild(iframe);
+        var doc = iframe.contentWindow.document;
+        doc.open(); doc.close();
+        pbjs.renderAd(doc, top.adId);
+        var ph = $('ph-' + s.code); if (ph) ph.style.display = 'none';
+        setSlotState(s.code, 'won', top.bidder + ' · ' + fmt(top.cpm) + ' · ' + (top.creativeId || '?'));
+      });
+    }
+
+    function sendAdserverRequest() {
+      if (pbjs.adserverRequestSent) return;
+      pbjs.adserverRequestSent = true;
+      googletag.cmd.push(function () {
+        pbjs.que.push(function () {
+          pbjs.setTargetingForGPTAsync();
+          googletag.pubads().refresh();
+        });
+      });
+    }
+
+    pbjs.que.push(function () {
+      pbjs.setConfig({ debug: DEBUG });
+      pbjs.addAdUnits(adUnits);
+
+      pbjs.onEvent && pbjs.onEvent('bidWon', function (bid) {
+        var code = bid.adUnitCode;
+        setSlotState(code, 'won', bid.bidder + ' · ' + fmt(bid.cpm) + ' · ' + bid.width + '×' + bid.height);
+        var ph = $('ph-' + code); if (ph) ph.style.display = 'none';
+        logLine('ok', 'bidWon ' + code + ' ' + bid.bidder + ' @ ' + fmt(bid.cpm));
+      });
+      pbjs.onEvent && pbjs.onEvent('noBid', function (bid) {
+        logLine('warn', 'noBid ' + bid.adUnitCode + ' from ' + bid.bidder);
+      });
+      pbjs.onEvent && pbjs.onEvent('bidTimeout', function (timedOut) {
+        (timedOut || []).forEach(function (b) { logLine('err', 'bidTimeout ' + b.adUnitCode + ' from ' + b.bidder); });
+      });
+
+      var ver = (pbjs.getConfig && pbjs.getConfig('version')) || pbjs.version || 'unknown';
+      $('d-pbjs-ver').textContent = ver;
+      $('d-pbjs-ver').classList.remove('empty');
+      setStatus('ok', 'ready');
+      logLine('ok', 'prebid ready (debug=' + DEBUG + ', timeout=' + PREBID_TIMEOUT + ')');
+      runAuction();
+    });
+
+    googletag.cmd.push(function () {
+      SLOT_DEFS.forEach(function (s) {
+        googletag.defineSlot(s.gpt, [s.size], s.code).addService(googletag.pubads());
+      });
+      googletag.pubads().enableSingleRequest();
+      googletag.pubads().addEventListener('slotRenderEnded', function (e) {
+        var code = e.slot.getSlotElementId();
+        if (e.isEmpty) {
+          setSlotState(code, 'empty', 'no fill');
+          var ph = $('ph-' + code); if (ph) ph.textContent = 'no fill';
+          logLine('warn', 'slotRenderEnded ' + code + ' empty');
+        } else {
+          var ph = $('ph-' + code); if (ph) ph.style.display = 'none';
+          logLine('ok', 'slotRenderEnded ' + code + ' ' + e.size);
+        }
+      });
+      googletag.enableServices();
+      $('d-gpt').textContent = 'loaded · SRA on';
+      $('d-gpt').classList.remove('empty');
+      logLine('ok', 'googletag ready');
+    });
+
+    setTimeout(function () {
+      if (!pbjs.adserverRequestSent && !NO_GPT) {
+        logLine('warn', 'failsafe timeout fired (' + FAILSAFE_TIMEOUT + 'ms)');
+        sendAdserverRequest();
+      }
+    }, FAILSAFE_TIMEOUT);
+
+    document.addEventListener('DOMContentLoaded', function () {
+      initDiagnostics();
+      renderSlotGrid();
+      SLOT_DEFS.forEach(function (s) {
+        var div = document.getElementById(s.code);
+        if (!div || NO_GPT) return;
+        googletag.cmd.push(function () { googletag.display(s.code); });
+      });
+    });
+  </script>
+</body>
 </html>
