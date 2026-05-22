@@ -76,13 +76,14 @@
       gap: 1rem;
       padding-bottom: 2rem;
       border-bottom: 1px solid var(--line);
-      margin-bottom: 2.25rem;
+      margin-bottom: 0;
     }
     .top .brand {
       display: flex; align-items: center; gap: .65rem;
     }
     .top .mark {
-      width: 22px; height: 22px;
+      width: 22px;
+      height: 22px;
       background: var(--accent);
       border-radius: 5px;
     }
@@ -323,7 +324,9 @@
       padding: 1rem 0;
     }
     #request-section {
+      border-top: 0;
       border-bottom: 1px solid var(--line);
+      padding: .9rem 0;
       margin-bottom: 2.5rem;
     }
     details > summary {
@@ -472,7 +475,7 @@
   <div class="wrap">
     <div class="top">
       <div class="brand">
-        <span class="mark"></span>
+        <span class="mark" aria-hidden="true"></span>
         <h1>Prebid Test</h1>
       </div>
       <div class="actions">
@@ -482,7 +485,7 @@
     </div>
 
     <details id="request-section">
-      <summary>Targeting info</summary>
+      <summary>Info</summary>
       <div class="body">
         <div class="request-actions">
           <button id="btn-copy-request" class="ghost">Copy all</button>
