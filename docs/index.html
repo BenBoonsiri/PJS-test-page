@@ -154,6 +154,42 @@
     }
     button.ghost:hover { color: var(--accent); border-color: transparent; background: transparent; }
 
+    .request-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: .5rem;
+    }
+    .request-rows {
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+    }
+    .request-row {
+      display: grid;
+      grid-template-columns: 90px minmax(0, 1fr) auto;
+      gap: 1rem;
+      align-items: center;
+      padding: .6rem .75rem;
+      background: var(--surface);
+      border-radius: 8px;
+      border: 1px solid var(--line-soft);
+    }
+    .request-row .k {
+      font-size: .72rem;
+      font-weight: 600;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .request-row .v {
+      font-family: var(--mono);
+      font-size: .82rem;
+      color: var(--text);
+      word-break: break-all;
+      line-height: 1.45;
+    }
+    .request-row .v.empty { color: var(--muted); font-style: italic; }
+
     /* ---- status dots ---- */
     .dot {
       width: 7px; height: 7px;
@@ -371,8 +407,15 @@
     /* ---- responsive ---- */
     @media (max-width: 600px) {
       .wrap { padding: 1.5rem 1rem 3rem; }
+      .request-row { grid-template-columns: 75px minmax(0, 1fr) auto; }
       .top h1 { font-size: .9rem; }
       .top .tag { display: none; }
+    }
+
+    .copy-flash { animation: flash .5s ease; }
+    @keyframes flash {
+      0%   { background: var(--ok); color: #fff; border-color: var(--ok); }
+      100% { background: transparent; color: var(--text); border-color: var(--line); }
     }
   </style>
 
@@ -477,6 +520,37 @@
       </div>
     </details>
 
+    <details id="request-section">
+      <summary>Request details</summary>
+      <div class="body">
+        <div class="request-actions">
+          <button id="btn-copy-request" class="ghost">Copy all</button>
+        </div>
+        <div class="request-rows">
+          <div class="request-row">
+            <span class="k">Domain</span>
+            <span class="v" id="d-domain"></span>
+            <button data-copy-request="domain" class="ghost">Copy</button>
+          </div>
+          <div class="request-row">
+            <span class="k">Page URL</span>
+            <span class="v" id="d-page-url"></span>
+            <button data-copy-request="page-url" class="ghost">Copy</button>
+          </div>
+          <div class="request-row">
+            <span class="k">IP</span>
+            <span class="v empty" id="d-ip">detecting...</span>
+            <button data-copy-request="ip" class="ghost">Copy</button>
+          </div>
+          <div class="request-row">
+            <span class="k">UA</span>
+            <span class="v" id="d-ua"></span>
+            <button data-copy-request="ua" class="ghost">Copy</button>
+          </div>
+        </div>
+      </div>
+    </details>
+
     <footer>
       <span><a href="https://docs.prebid.org/dev-docs/bidders/stackadapt.html" target="_blank" rel="noopener">stackadapt adapter docs</a></span>
     </footer>
@@ -505,6 +579,76 @@
       var log = $('log');
       log.appendChild(line);
       log.scrollTop = log.scrollHeight;
+    }
+
+    function flashCopy(btn) {
+      btn.classList.add('copy-flash');
+      var orig = btn.textContent;
+      btn.textContent = 'Copied';
+      setTimeout(function () { btn.classList.remove('copy-flash'); btn.textContent = orig; }, 700);
+    }
+
+    function copyText(text, btn) {
+      if (!text) return;
+      var done = function () { if (btn) flashCopy(btn); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () { fallbackCopy(text); done(); });
+      } else {
+        fallbackCopy(text); done();
+      }
+    }
+
+    function fallbackCopy(text) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+
+    function getRequestValue(key) {
+      if (key === 'domain') return window.location.hostname;
+      if (key === 'page-url') return window.location.href;
+      if (key === 'ua') return navigator.userAgent;
+      if (key === 'ip') {
+        var ip = $('d-ip').textContent;
+        return /detecting|failed/i.test(ip) ? '' : ip;
+      }
+      return '';
+    }
+
+    function initRequestDetails() {
+      $('d-domain').textContent = window.location.hostname;
+      $('d-page-url').textContent = window.location.href;
+      $('d-ua').textContent = navigator.userAgent;
+
+      Array.prototype.forEach.call(document.querySelectorAll('[data-copy-request]'), function (btn) {
+        btn.addEventListener('click', function (e) {
+          copyText(getRequestValue(btn.getAttribute('data-copy-request')), e.currentTarget);
+        });
+      });
+      $('btn-copy-request').addEventListener('click', function (e) {
+        var blob =
+          'Domain: ' + getRequestValue('domain') + '\n' +
+          'Page URL: ' + getRequestValue('page-url') + '\n' +
+          'IP: ' + (getRequestValue('ip') || '(detect failed)') + '\n' +
+          'UA: ' + getRequestValue('ua');
+        copyText(blob, e.currentTarget);
+      });
+
+      fetch('https://icanhazip.com/', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.text() : Promise.reject('HTTP ' + r.status); })
+        .then(function (t) {
+          var ip = t.trim();
+          $('d-ip').textContent = ip;
+          $('d-ip').classList.remove('empty');
+        })
+        .catch(function () {
+          $('d-ip').textContent = 'detect failed';
+        });
     }
 
     function initDiagnostics() {
@@ -737,6 +881,7 @@
 
     document.addEventListener('DOMContentLoaded', function () {
       initDiagnostics();
+      initRequestDetails();
       renderSlotGrid();
       SLOT_DEFS.forEach(function (s) {
         var div = document.getElementById(s.code);
