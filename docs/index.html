@@ -15,6 +15,9 @@
     ?timeout=<ms>       prebid auction timeout (default 1500)
     ?debug=0            disable pbjs.setConfig({debug:true})
     ?noGPT=1            render winning bid directly (skip GoogleTag)
+    ?scenario=<name>    test scenario (default "normal"):
+                          normal - bid as usual (baseline, expect a bid)
+                          optout - opted out
 -->
 <!doctype html>
 <html lang="en">
@@ -437,6 +440,10 @@
     var DEBUG           = params.get('debug') !== '0';
     var NO_GPT          = params.get('noGPT') === '1';
 
+    var SCENARIO = (params.get('scenario') || 'normal').toLowerCase();
+
+    var OPTOUT_BUYER_ID = '0-b7abde4b-d371-4ade-5d5c-60832c077501$optout';
+
     function buildBidParams() {
       var p = { publisherId: PUBLISHER_ID };
       if (PLACEMENT_ID) p.placementId = PLACEMENT_ID;
@@ -834,7 +841,12 @@
     }
 
     pbjs.que.push(function () {
-      pbjs.setConfig({ debug: DEBUG });
+      var cfg = { debug: DEBUG };
+      if (SCENARIO === 'optout') {
+        cfg.ortb2 = { user: { buyerid: OPTOUT_BUYER_ID, buyeruid: OPTOUT_BUYER_ID } };
+        logLine('warn', 'scenario=optout: tagging user.buyerid with $optout');
+      }
+      pbjs.setConfig(cfg);
       pbjs.addAdUnits(adUnits);
 
       pbjs.onEvent && pbjs.onEvent('bidWon', function (bid) {
