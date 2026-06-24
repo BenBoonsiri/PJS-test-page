@@ -439,6 +439,7 @@
     var PREBID_TIMEOUT  = parseInt(params.get('timeout'), 10) || 1500;
     var DEBUG           = params.get('debug') !== '0';
     var NO_GPT          = params.get('noGPT') === '1';
+    var TEST            = params.get('test') === '1';
 
     var SCENARIO = (params.get('scenario') || 'normal').toLowerCase();
 
@@ -448,6 +449,7 @@
       var p = { publisherId: PUBLISHER_ID };
       if (PLACEMENT_ID) p.placementId = PLACEMENT_ID;
       if (BIDFLOOR > 0) p.bidfloor = BIDFLOOR;
+      if (TEST) p.testMode = 1;
       return p;
     }
 
