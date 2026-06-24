@@ -6,7 +6,7 @@
     <title>Native Ad Unit</title>
 
     <!-- required scripts -->
-    <script async src="//cdn.jsdelivr.net/npm/prebid.js@latest/dist/not-for-prod/prebid.js"></script>
+    <script async src="./prebid.js"></script>
     <script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
   </head>
   <body>
@@ -112,7 +112,8 @@ pbjs.que.push(function() {
             bids: [{
                 bidder: 'stackadapt',
                 params: {
-                    publisherId: '123'
+                    publisherId: '123',
+                    supplyId: 'ssp-1'
                 }
             }]
         },

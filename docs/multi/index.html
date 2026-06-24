@@ -13,11 +13,32 @@
     <link href="https://vjs.zencdn.net/7.21.1/video-js.css" rel="stylesheet">
     <script src="https://vjs.zencdn.net/7.21.1/video.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/videojs-vast-vpaid@2.0.2/bin/videojs_5.vast.vpaid.min.js"></script>
-    <script async src="./../prebid.js"></script>
+    
+    <script async src="./prebid.js"></script>
     <script async src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>
     <script>
         var FAILSAFE_TIMEOUT = 3300;
         var PREBID_TIMEOUT = 1000;
+
+        var adUnits = [{
+                code: 'div-gpt-ad-1460505748561-0',
+                mediaTypes: {
+                    banner: {
+                        sizes: [[300, 250]],
+                    }
+                },
+
+            // Replace this object to test a new Adapter!
+                bids: [{
+                    bidder: 'stackadapt',
+                    params: {
+                        publisherId: '123',
+                        supplyId: 'ssp-1'
+                    }
+                }]
+
+        }];
+
 
         var videoAdUnit = {
             code: 'video',
@@ -53,7 +74,6 @@
         });
 
         pbjs.que.push(function () {
-            pbjs.addAdUnits(videoAdUnit);
             pbjs.setConfig({
                 debug: true,
                 // Prebid Server configuration
@@ -79,31 +99,53 @@
                     url: 'http://localhost:2424/cache'
                 }
             });
+            pbjs.addAdUnits(adUnits);
+            pbjs.addAdUnits(videoAdUnit);
 
             pbjs.requestBids({
-                bidsBackHandler: function(bids) {
-                    console.log('bidsBackHandler bids:', bids);
-
-                    var adUnitBids = bids[videoAdUnit.code];
-                    if (!adUnitBids || !adUnitBids.bids || adUnitBids.bids.length === 0) {
-                        console.warn('No video bids received');
-                        return;
-                    }
-
-                    var winningBid = adUnitBids.bids[0];
-                    console.log('Winning bid:', winningBid);
-
-                    if (winningBid.vastXml) {
-                        invokeVideoPlayerWithVast(winningBid.vastXml);
-                    } else if (winningBid.vastUrl) {
-                        invokeVideoPlayer(winningBid.vastUrl);
-                    } else {
-                        console.warn('No VAST XML or URL in bid response');
-                    }
-                },
+                bidsBackHandler: sendAdserverRequest,
                 timeout: PREBID_TIMEOUT
             });
         });
+
+        function sendAdserverRequest(bids) {
+            if (pbjs.adserverRequestSent) return;
+            pbjs.adserverRequestSent = true;
+            googletag.cmd.push(function () {
+                if (pbjs.libLoaded) {
+                    pbjs.que.push(function () {
+                        pbjs.setTargetingForGPTAsync();
+                        googletag.pubads().refresh();
+                    });
+                } else {
+                    googletag.pubads().refresh();
+                }
+            });
+
+            console.log('bidsBackHandler bids:', bids);
+
+            var adUnitBids = bids[videoAdUnit.code];
+            if (!adUnitBids || !adUnitBids.bids || adUnitBids.bids.length === 0) {
+                console.warn('No video bids received');
+                return;
+            }
+
+            var winningBid = adUnitBids.bids[0];
+            console.log('Winning bid:', winningBid);
+
+            if (winningBid.vastXml) {
+                invokeVideoPlayerWithVast(winningBid.vastXml);
+            } else if (winningBid.vastUrl) {
+                invokeVideoPlayer(winningBid.vastUrl);
+            } else {
+                console.warn('No VAST XML or URL in bid response');
+            }
+        }
+
+        setTimeout(function () {
+            sendAdserverRequest();
+        }, FAILSAFE_TIMEOUT);
+
     </script>
 
     <script>
@@ -135,6 +177,12 @@
         Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.
         
         Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos.</p>
+    <div id='div-gpt-ad-1460505748561-0'>
+        <script type='text/javascript'>
+            googletag.cmd.push(function () { googletag.display('div-gpt-ad-1460505748561-0'); });
+        </script>
+    </div>
+
 
     <div class="example-video-container">
         <video id="vid1" class="video-js vjs-default-skin vjs-big-play-centered" controls
