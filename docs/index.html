@@ -15,6 +15,12 @@
     ?timeout=<ms>       prebid auction timeout (default 1500)
     ?debug=0            disable pbjs.setConfig({debug:true})
     ?noGPT=1            render winning bid directly (skip GoogleTag)
+    ?test=1             send OpenRTB test=1 (adserver always injects the ad
+                          context script for these bids)
+    ?scriptUrl=<url>    override the sa-ad-context-script src in the winning
+                          creative with this URL before rendering. Implies a
+                          page-controlled render (skips GoogleTag) and is meant
+                          to be used together with test=1.
     ?scenario=<name>    test scenario (default "normal"):
                           normal - bid as usual (baseline, expect a bid)
                           optout - opted out
@@ -433,13 +439,14 @@
     var FAILSAFE_TIMEOUT = 3300;
 
     var params = new URLSearchParams(window.location.search);
-    var PUBLISHER_ID    = params.get('publisherId')  || '123';
-    var PLACEMENT_ID    = params.get('placementId')  || '';
-    var BIDFLOOR        = parseFloat(params.get('bidfloor')) || 0;
-    var PREBID_TIMEOUT  = parseInt(params.get('timeout'), 10) || 1500;
-    var DEBUG           = params.get('debug') !== '0';
-    var NO_GPT          = params.get('noGPT') === '1';
-    var TEST            = params.get('test') === '1';
+    var PUBLISHER_ID       = params.get('publisherId')  || '123';
+    var PLACEMENT_ID       = params.get('placementId')  || '';
+    var BIDFLOOR           = parseFloat(params.get('bidfloor')) || 0;
+    var PREBID_TIMEOUT     = parseInt(params.get('timeout'), 10) || 1500;
+    var DEBUG              = params.get('debug') !== '0';
+    var NO_GPT             = params.get('noGPT') === '1';
+    var TEST               = params.get('test') === '1';
+    var AD_CTX_SCRIPT_URL  = params.get('scriptUrl') || '';
 
     var SCENARIO = (params.get('scenario') || 'normal').toLowerCase();
 
@@ -675,7 +682,11 @@
       if (PLACEMENT_ID) { $('d-place').textContent = PLACEMENT_ID; $('d-place').classList.remove('empty'); }
       if (BIDFLOOR > 0) { $('d-floor').textContent = String(BIDFLOOR); $('d-floor').classList.remove('empty'); }
       $('d-to').textContent   = PREBID_TIMEOUT + ' ms';
-      $('d-mode').textContent = NO_GPT ? 'pbjs.renderAd (no GPT)' : 'GoogleTag · GAM 19968336';
+      if (AD_CTX_SCRIPT_URL) {
+        $('d-mode').textContent = 'ad context override → ' + AD_CTX_SCRIPT_URL;
+      } else {
+        $('d-mode').textContent = NO_GPT ? 'pbjs.renderAd (no GPT)' : 'GoogleTag · GAM 19968336';
+      }
       $('d-auc').textContent  = String(auctionCount);
 
       $('btn-refresh').addEventListener('click', function () {
@@ -804,8 +815,40 @@
         setStatus('ok', totalBids + ' bid' + (totalBids === 1 ? '' : 's'));
       }
 
-      if (NO_GPT) renderViaPrebid(wonPerSlot);
-      else        sendAdserverRequest();
+      if (NO_GPT || AD_CTX_SCRIPT_URL) renderViaPrebid(wonPerSlot);
+      else                          sendAdserverRequest();
+    }
+
+    // Rewrite the ad context script URL in a creative's markup so the test
+    // script (adContextUrl) loads instead of the production one. Handles the two
+    // ways the adserver can emit it:
+    //   1. Direct tag: a sa-ad-context-script script element with a src
+    //      attribute (either attribute ordering).
+    //   2. Loader: a sa-loader-script script element whose minified JS embeds
+    //      the URL as a src:"..." property.
+    function rewriteAdContextSrc(adHtml, overrideUrl) {
+      if (!overrideUrl || !adHtml) return adHtml;
+
+      // Direct tag, id before src.
+      var rewritten = adHtml.replace(
+        /(<script\b[^>]*\bid=["']sa-ad-context-script["'][^>]*\bsrc=["'])[^"']*(["'])/i,
+        '$1' + overrideUrl + '$2'
+      );
+      if (rewritten !== adHtml) return rewritten;
+
+      // Direct tag, src before id.
+      rewritten = adHtml.replace(
+        /(<script\b[^>]*\bsrc=["'])[^"']*(["'][^>]*\bid=["']sa-ad-context-script["'])/i,
+        '$1' + overrideUrl + '$2'
+      );
+      if (rewritten !== adHtml) return rewritten;
+
+      // Loader: replace the src:"..." property inside the sa-loader-script block.
+      rewritten = adHtml.replace(
+        /(<script\b[^>]*\bid=["']sa-loader-script["'][^>]*>[\s\S]*?\bsrc:["'])[^"']*(["'])/i,
+        '$1' + overrideUrl + '$2'
+      );
+      return rewritten;
     }
 
     function renderViaPrebid(wonPerSlot) {
@@ -823,9 +866,24 @@
         iframe.width = s.size[0]; iframe.height = s.size[1];
         iframe.style.border = '0';
         target.innerHTML = ''; target.appendChild(iframe);
-        var doc = iframe.contentWindow.document;
-        doc.open(); doc.close();
-        pbjs.renderAd(doc, top.adId);
+
+        if (AD_CTX_SCRIPT_URL) {
+          // Inject the (possibly rewritten) creative ourselves so the override
+          // takes effect. top.ad is the raw ADM string from the bid response.
+          var original = top.ad || '';
+          var rewritten = rewriteAdContextSrc(original, AD_CTX_SCRIPT_URL);
+          if (rewritten === original) {
+            logLine('warn', s.code + ': no ad context script (direct tag or loader) found to override');
+          } else {
+            logLine('ok', s.code + ': overrode ad context script src → ' + AD_CTX_SCRIPT_URL);
+          }
+          iframe.srcdoc = rewritten;
+        } else {
+          var doc = iframe.contentWindow.document;
+          doc.open(); doc.close();
+          pbjs.renderAd(doc, top.adId);
+        }
+
         var ph = $('ph-' + s.code); if (ph) ph.style.display = 'none';
         setSlotState(s.code, 'won', top.bidder + ' · ' + fmt(top.cpm) + ' · ' + (top.creativeId || '?'));
       });
@@ -895,7 +953,7 @@
     });
 
     setTimeout(function () {
-      if (!pbjs.adserverRequestSent && !NO_GPT) {
+      if (!pbjs.adserverRequestSent && !NO_GPT && !AD_CTX_SCRIPT_URL) {
         logLine('warn', 'failsafe timeout fired (' + FAILSAFE_TIMEOUT + 'ms)');
         sendAdserverRequest();
       }
@@ -907,7 +965,7 @@
       renderSlotGrid();
       SLOT_DEFS.forEach(function (s) {
         var div = document.getElementById(s.code);
-        if (!div || NO_GPT) return;
+        if (!div || NO_GPT || AD_CTX_SCRIPT_URL) return;
         googletag.cmd.push(function () { googletag.display(s.code); });
       });
     });
