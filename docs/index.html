@@ -17,6 +17,8 @@
     ?noGPT=1            render winning bid directly (skip GoogleTag)
     ?test=1             send OpenRTB test=1 (adserver always injects the ad
                           context script for these bids)
+    ?deal=<id>          send this deal ID on every slot (imp.pmp). Without
+                          test=1 this is a real, billable bid.
     ?scriptUrl=<url>    override the sa-ad-context-script src in the winning
                           creative with this URL before rendering. Implies a
                           page-controlled render (skips GoogleTag) and is meant
@@ -446,6 +448,7 @@
     var DEBUG              = params.get('debug') !== '0';
     var NO_GPT             = params.get('noGPT') === '1';
     var TEST               = params.get('test') === '1';
+    var DEAL_ID            = params.get('deal')         || '';
     var AD_CTX_SCRIPT_URL  = params.get('scriptUrl') || '';
 
     var SCENARIO = (params.get('scenario') || 'normal').toLowerCase();
@@ -468,11 +471,15 @@
     ];
 
     var adUnits = SLOT_DEFS.map(function (s) {
-      return {
+      var unit = {
         code: s.code,
         mediaTypes: { banner: { sizes: [s.size] } },
         bids: [{ bidder: 'stackadapt', params: buildBidParams() }]
       };
+      if (DEAL_ID) {
+        unit.ortb2Imp = { pmp: { private_auction: 1, deals: [{ id: DEAL_ID }] } };
+      }
+      return unit;
     });
 
     var pbjs = pbjs || {};
@@ -556,6 +563,7 @@
           <dt>Publisher ID</dt>       <dd id="d-pub"></dd>
           <dt>Placement ID</dt>       <dd class="empty" id="d-place">—</dd>
           <dt>Bid floor</dt>          <dd class="empty" id="d-floor">—</dd>
+          <dt>Deal ID</dt>            <dd class="empty" id="d-deal">—</dd>
           <dt>Auction timeout</dt>    <dd id="d-to"></dd>
           <dt>Render mode</dt>        <dd id="d-mode"></dd>
           <dt>Referrer</dt>           <dd class="empty" id="d-ref">none</dd>
@@ -681,6 +689,7 @@
       $('d-pub').textContent  = PUBLISHER_ID;
       if (PLACEMENT_ID) { $('d-place').textContent = PLACEMENT_ID; $('d-place').classList.remove('empty'); }
       if (BIDFLOOR > 0) { $('d-floor').textContent = String(BIDFLOOR); $('d-floor').classList.remove('empty'); }
+      if (DEAL_ID) { $('d-deal').textContent = DEAL_ID + (TEST ? ' (test)' : ''); $('d-deal').classList.remove('empty'); }
       $('d-to').textContent   = PREBID_TIMEOUT + ' ms';
       if (AD_CTX_SCRIPT_URL) {
         $('d-mode').textContent = 'ad context override → ' + AD_CTX_SCRIPT_URL;
